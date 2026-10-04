@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>geometric nightmare simulator</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: #e8e4f0;
+      background-image:
+        radial-gradient(circle at 25% 30%, #f5f0ff 0%, transparent 55%),
+        radial-gradient(circle at 75% 75%, #e0eaf5 0%, transparent 50%),
+        linear-gradient(160deg, #d8d4e6 0%, #c8c4d8 100%);
+      font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    body { display: flex; justify-content: center; align-items: center; transition: background 0.6s ease; }
+    body.void-active { background: #ffffff; background-image: none; }
+
+    .button-container {
+      perspective: 1000px; padding: 3rem;
+      filter: drop-shadow(0 8px 15px rgba(100, 90, 140, 0.25));
+      transition: opacity 0.4s ease;
+    }
+    body.void-active .button-container { opacity: 0; pointer-events: none; }
+
+    .skeuo-btn {
+      position: relative; display: inline-block;
+      padding: 2rem 5rem; min-width: 260px; min-height: 110px;
+      cursor: pointer; border: none; outline: none;
+      border-radius: 28px;
+      transform: rotateX(6deg) rotateY(-2deg) translateZ(0);
+      transform-style: preserve-3d; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      overflow: hidden; z-index: 10;
+      background:
+        linear-gradient(180deg, transparent 0%, transparent 75%, rgba(120, 140, 190, 0.18) 100%),
+        linear-gradient(175deg, #cfe0f2 0%, #bcd2ea 15%, #aec8e2 40%, #a2bcd8 70%, #96aecd 100%);
+      box-shadow:
+        0 6px 0 #7e8eb0, 0 8px 0 #5e6e94,
+        0 12px 18px rgba(60, 70, 110, 0.35),
+        0 0 22px rgba(160, 190, 230, 0.25),
+        inset 0 4px 3px rgba(255, 255, 255, 0.9),
+        inset 0 6px 10px rgba(220, 235, 255, 0.55),
+        inset 2px 0 4px rgba(255, 255, 255, 0.35),
+        inset -2px 0 4px rgba(100, 120, 170, 0.2),
+        inset 0 -5px 8px rgba(80, 100, 150, 0.35),
+        inset 0 0 30px rgba(180, 210, 255, 0.25);
+      border: 2px solid rgba(220, 235, 255, 0.9);
+      border-top-color: #ffffff; border-left-color: #e5eeff;
+      border-right-color: #90a5c8; border-bottom-color: #5a6a90;
+      transition: transform 0.07s cubic-bezier(0.2, 0.9, 0.3, 1.2),
+                  box-shadow 0.07s ease, background 0.07s ease;
+    }
+    .skeuo-btn::before {
+      content: ''; position: absolute; inset: 2px; border-radius: 26px;
+      background:
+        radial-gradient(ellipse at 50% -5%, rgba(255,255,255,1) 0%, rgba(255,255,255,0.6) 22%, rgba(255,255,255,0.1) 50%, transparent 70%),
+        linear-gradient(90deg, rgba(255,255,255,0.4) 0%, transparent 6%, transparent 94%, rgba(255,255,255,0.3) 100%),
+        linear-gradient(180deg, transparent 60%, rgba(255,255,255,0.12) 85%, rgba(255,255,255,0.25) 100%);
+      pointer-events: none; mix-blend-mode: screen; z-index: 5;
+    }
+    .skeuo-btn:active { transform: rotateX(6deg) rotateY(-2deg) translateY(6px) scale(0.99); }
+
+    .void {
+      position: fixed; inset: 0; background: #ffffff;
+      z-index: 1000; opacity: 0; pointer-events: none;
+      transition: opacity 1.2s ease; overflow: hidden;
+    }
+    body.void-active .void { opacity: 1; pointer-events: auto; }
+    /* Instant cut back to the button — no fade out */
+    body.void-active.void-cut .void { transition: none; opacity: 0; }
+    body.void-active.void-cut .button-container { transition: none; opacity: 1; }
+
+    .red-tint {
+      position: absolute; inset: 0; pointer-events: none; z-index: 2;
+      background: linear-gradient(to top,
+        rgba(255,0,0,0.95) 0%,
+        rgba(190,0,0,0.75) 25%,
+        rgba(120,0,0,0.45) 55%,
+        rgba(60,0,0,0.15) 80%,
+        transparent 100%);
+      opacity: 0; mix-blend-mode: multiply;
+      transition: opacity 0.5s linear;
+    }
+
+    .strobe-layer {
+      position: absolute; inset: 0; pointer-events: none; z-index: 9;
+      opacity: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='4' height='4'%3E%3Crect width='2' height='2' fill='%23000'/%3E%3Crect x='2' y='2' width='2' height='2' fill='%23000'/%3E%3C/svg%3E");
+      background-size: 4px 4px;
+      mix-blend-mode: overlay;
+      animation: strobe-flicker 0.08s infinite steps(2);
+    }
+    @keyframes strobe-flicker {
+      0%   { background-position: 0 0; }
+      50%  { background-position: 2px 2px; }
+      100% { background-position: 0 0; }
+    }
+
+    .pixel-layer {
+      position: absolute; inset: 0; pointer-events: none; z-index: 8;
+      opacity: 0;
+      image-rendering: pixelated;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='none'/%3E%3Crect x='0' y='0' width='8' height='8' fill='%23ff0040' opacity='0.5'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%2300ffcc' opacity='0.5'/%3E%3C/svg%3E");
+      background-size: 16px 16px;
+      mix-blend-mode: difference;
+      animation: pixel-shift 0.12s infinite steps(3);
+    }
+    @keyframes pixel-shift {
+      0%   { background-position: 0 0; }
+      33%  { background-position: 16px 8px; }
+      66%  { background-position: -8px 16px; }
+      100% { background-position: 8px -8px; }
+    }
+
+    :root { --circle-size: 3px; --circle-x: 50%; --circle-y: 50%; }
+
+    .void-circle {
+      position: absolute; top: var(--circle-y); left: var(--circle-x);
+      width: var(--circle-size); height: var(--circle-size);
+      border-radius: 50%; background: #000000;
+      transform: translate(-50%, -50%);
+      will-change: width, height, top, left;
+      z-index: 50;
+      box-shadow:
+        0 0 8px 4px rgba(0,0,0,0.55),
+        0 0 20px 10px rgba(0,0,0,0.35),
+        0 0 40px 20px rgba(0,0,0,0.18);
+      filter: blur(0.4px);
+      transition: filter 0.3s ease, box-shadow 0.3s ease;
+    }
+    .void-circle.big {
+      filter: blur(3px);
+      box-shadow:
+        0 0 14px 8px rgba(0,0,0,0.7),
+        0 0 40px 20px rgba(0,0,0,0.5),
+        0 0 90px 45px rgba(0,0,0,0.28);
+    }
+
+    .void-static {
+      position: absolute; inset: 0; pointer-events: none;
+      opacity: 0.05; mix-blend-mode: multiply;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 220px 220px;
+      animation: static-shift 0.1s infinite linear; z-index: 3;
+    }
+
+    .glitch-layer {
+      position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 10;
+      -webkit-mask-image: radial-gradient(circle at var(--circle-x) var(--circle-y),
+        transparent 0, transparent calc(var(--circle-size) / 2),
+        #000 calc(var(--circle-size) / 2 + 2px), #000 100%);
+      mask-image: radial-gradient(circle at var(--circle-x) var(--circle-y),
+        transparent 0, transparent calc(var(--circle-size) / 2),
+        #000 calc(var(--circle-size) / 2 + 2px), #000 100%);
+      transition: opacity 0.5s linear;
+    }
+    .g-blocks { overflow: hidden; }
+    .g-blocks .blk { position: absolute; will-change: transform; }
+    .g-chroma {
+      mix-blend-mode: screen;
+      background: repeating-linear-gradient(0deg,
+        transparent 0px, transparent 5px,
+        rgba(255,0,60,0.6) 5px, rgba(255,0,60,0.6) 7px,
+        rgba(0,255,200,0.6) 7px, rgba(0,255,200,0.6) 9px,
+        transparent 9px, transparent 16px);
+      animation: chroma-jitter 0.07s infinite steps(4);
+    }
+    .g-tear {
+      mix-blend-mode: overlay;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='t'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23t)'/%3E%3C/svg%3E");
+      background-size: 220px 220px;
+      animation: tear-shift 0.06s infinite linear;
+    }
+    @keyframes static-shift { 0% { background-position: 0 0; } 100% { background-position: 200px 110px; } }
+    @keyframes chroma-jitter {
+      0% { background-position: 0 0; } 20% { background-position: 0 -20px; }
+      40% { background-position: 0 14px; } 60% { background-position: 0 -8px; }
+      80% { background-position: 0 26px; } 100% { background-position: 0 -4px; }
+    }
+    @keyframes tear-shift { 0% { background-position: 0 0; } 100% { background-position: 260px 140px; } }
+
+    @media (max-width: 550px) {
+      .skeuo-btn { padding: 1.6rem 3.5rem; min-width: 220px; min-height: 90px; border-radius: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="button-container">
+    <button class="skeuo-btn" id="glitchButton" aria-label="Begin"></button>
+  </div>
+
+  <div class="void" id="void" aria-hidden="true">
+    <div class="red-tint" id="redTint"></div>
+    <div class="void-static" id="voidStatic"></div>
+    <div class="strobe-layer" id="strobeLayer"></div>
+    <div class="pixel-layer" id="pixelLayer"></div>
+    <div class="glitch-layer g-blocks" id="gBlocks"></div>
+    <div class="glitch-layer g-chroma" id="gChroma"></div>
+    <div class="glitch-layer g-tear" id="gTear"></div>
+    <div class="void-circle" id="voidCircle"></div>
+  </div>
+
+  <script>
+    (function() {
+      const button   = document.getElementById('glitchButton');
+      const body     = document.body;
+      const staticEl = document.getElementById('voidStatic');
+      const gBlocks  = document.getElementById('gBlocks');
+      const gChroma  = document.getElementById('gChroma');
+      const gTear    = document.getElementById('gTear');
+      const redTint  = document.getElementById('redTint');
+      const strobeLayer = document.getElementById('strobeLayer');
+      const pixelLayer  = document.getElementById('pixelLayer');
+      const voidCircle  = document.getElementById('voidCircle');
+
+      let audioCtx = null;
+      let masterGain = null;
+      let staticNode = null;
+      let staticGain = null;
+
+      function ensureCtx() {
+        if (!audioCtx) {
+          audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+          masterGain = audioCtx.createGain();
+          masterGain.gain.value = 1.0;
+          masterGain.connect(audioCtx.destination);
+        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+      }
+
+      function debugBeep() {
+        if (!audioCtx) return;
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        osc.type = 'sine'; osc.frequency.value = 660;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, now);
+        g.gain.exponentialRampToValueAtTime(0.35, now + 0.01);
+        g.gain.exponentialRampToValueAtTime(0.0001, now + 0.35);
+        osc.connect(g); g.connect(masterGain);
+        osc.start(now); osc.stop(now + 0.4);
+      }
+
+      function startStatic(initialVolume = 0.02) {
+        if (!audioCtx) return;
+        if (staticNode) { try { staticNode.stop(); } catch(e){} staticNode = null; }
+        const bufferSize = 2 * audioCtx.sampleRate;
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        const src = audioCtx.createBufferSource();
+        src.buffer = buffer; src.loop = true;
+        const bp = audioCtx.createBiquadFilter();
+        bp.type = 'bandpass'; bp.frequency.value = 3200; bp.Q.value = 0.6;
+        staticGain = audioCtx.createGain();
+        staticGain.gain.value = initialVolume;
+        src.connect(bp); bp.connect(staticGain); staticGain.connect(masterGain);
+        src.start(); staticNode = src;
+      }
+
+      function rampStatic(toVol, time) {
+        if (!staticGain || !audioCtx) return;
+        const now = audioCtx.currentTime;
+        staticGain.gain.cancelScheduledValues(now);
+        staticGain.gain.setValueAtTime(staticGain.gain.value, now);
+        staticGain.gain.linearRampToValueAtTime(toVol, now + time);
+      }
+
+      function stopStatic() {
+        if (!audioCtx) return;
+        if (staticGain) {
+          const now = audioCtx.currentTime;
+          staticGain.gain.cancelScheduledValues(now);
+          staticGain.gain.setValueAtTime(staticGain.gain.value, now);
+          staticGain.gain.linearRampToValueAtTime(0.0001, now + 0.05);
+        }
+        setTimeout(() => {
+          try { if (staticNode) staticNode.stop(); } catch(e){}
+          staticNode = null; staticGain = null;
+        }, 120);
+      }
+
+      const roarLayers = [
+        { src: 'layer 1.mp3', el: null, targetVol: 0.85, startAt: 0.10, started: false, rampStart: 0, fadeSec: 6 },
+        { src: 'layer 2.mp3', el: null, targetVol: 0.95, startAt: 0.20, started: false, rampStart: 0, fadeSec: 6 },
+        { src: 'layer 3.wav', el: null, targetVol: 1.00, startAt: 0.30, started: false, rampStart: 0, fadeSec: 6 },
+        // Layer 4: only plays at the very end, no fade-in, no loop, cuts off instantly
+        { src: 'layer 4.mp3', el: null, targetVol: 1.00, startAt: 0.985, started: false, rampStart: 0, fadeSec: 0.1, oneShot: true }
+      ];
+
+      function preloadRoar() {
+        roarLayers.forEach(layer => {
+          if (layer.el) return;
+          const a = new Audio();
+          a.src = layer.src;
+          a.loop = !layer.oneShot;
+          a.preload = 'auto';
+          a.volume = 0;
+          a.preservesPitch = false;
+          a.mozPreservesPitch = false;
+          a.webkitPreservesPitch = false;
+          a.addEventListener('error', () => {
+            console.warn('roar layer failed to load:', layer.src, a.error);
+          });
+          layer.el = a;
+        });
+      }
+      preloadRoar();
+
+      function startRoarLayer(layer) {
+        if (!layer.el || layer.started) return;
+        layer.started = true;
+        layer.rampStart = performance.now();
+        layer.el.volume = 0;
+        const p = layer.el.play();
+        if (p && p.catch) {
+          p.catch(err => {
+            console.warn('roar play() blocked:', layer.src, err.name, err.message);
+            layer.started = false;
+          });
+        }
+      }
+
+      function updateRoarLayer(layer) {
+        if (!layer.started || !layer.el) return;
+        const elapsed = (performance.now() - layer.rampStart) / 1000;
+        const t = Math.min(1, elapsed / layer.fadeSec);
+        layer.el.volume = Math.min(1, layer.targetVol * t);
+      }
+
+      function stopRoarLayers() {
+        roarLayers.forEach(layer => {
+          if (layer.el) {
+            try { layer.el.pause(); } catch(e){}
+            try { layer.el.currentTime = 0; } catch(e){}
+            try { layer.el.playbackRate = 1; } catch(e){}
+            layer.el.volume = 0;
+          }
+          layer.started = false;
+        });
+      }
+
+      const blockPool = [];
+      for (let i = 0; i < 60; i++) {
+        const b = document.createElement('div');
+        b.className = 'blk';
+        gBlocks.appendChild(b);
+        blockPool.push({ el: b, w:0,h:0,x:0,y:0,vx:0,vy:0,life:0 });
+      }
+      const BLOCK_COLORS = [
+        'rgba(255,0,80,0.95)','rgba(0,255,220,0.95)','rgba(255,255,0,0.95)',
+        'rgba(150,0,255,0.95)','rgba(0,120,255,0.95)','rgba(255,0,255,0.95)',
+        'rgba(255,0,0,1)'
+      ];
+      function respawnBlock(b, intensity) {
+        const vw = window.innerWidth, vh = window.innerHeight;
+        b.w = 30 + Math.random() * 220 * (0.4 + intensity);
+        b.h = 4 + Math.random() * 40 * (0.4 + intensity);
+        b.x = Math.random() * (vw + 200) - 100;
+        b.y = Math.random() * vh;
+        b.vx = (Math.random() - 0.5) * (60 + 400 * intensity);
+        b.vy = (Math.random() - 0.5) * (10 + 60 * intensity);
+        b.life = 0.15 + Math.random() * 0.35;
+        b.el.style.width  = b.w + 'px';
+        b.el.style.height = b.h + 'px';
+        b.el.style.background = BLOCK_COLORS[(Math.random() * BLOCK_COLORS.length) | 0];
+        b.el.style.opacity = '1';
+      }
+      let blockIntensity = 0;
+      let lastBlockTime = 0;
+      function updateBlocks(now) {
+        const dt = Math.min(0.05, (now - lastBlockTime) / 1000) || 0.016;
+        lastBlockTime = now;
+        blockPool.forEach(b => {
+          b.life -= dt;
+          if (b.life <= 0) {
+            if (Math.random() < blockIntensity * 0.9) respawnBlock(b, blockIntensity);
+            else b.el.style.opacity = '0';
+          } else {
+            b.x += b.vx * dt; b.y += b.vy * dt;
+            b.el.style.transform = `translate(${b.x.toFixed(1)}px, ${b.y.toFixed(1)}px)`;
+          }
+        });
+      }
+
+      let sequenceTimers = [];
+      let voidRunning = false;
+      let rafId = null;
+      let currentCoverage = 0;
+      let pitchSwept = false;
+
+      function clearSequence() {
+        sequenceTimers.forEach(t => clearTimeout(t));
+        sequenceTimers = [];
+        if (rafId) cancelAnimationFrame(rafId);
+        rafId = null;
+      }
+      function setCircleSize(px) {
+        document.documentElement.style.setProperty('--circle-size', px + 'px');
+      }
+      function setCirclePos(xPct, yPct) {
+        document.documentElement.style.setProperty('--circle-x', xPct + '%');
+        document.documentElement.style.setProperty('--circle-y', yPct + '%');
+      }
+      function resetVisuals() {
+        setCircleSize(3);
+        setCirclePos(50, 50);
+        voidCircle.classList.remove('big');
+        staticEl.style.opacity = '0.05';
+        [gBlocks, gChroma, gTear].forEach(el => el.style.opacity = '0');
+        redTint.style.opacity = '0';
+        strobeLayer.style.opacity = '0';
+        pixelLayer.style.opacity = '0';
+        blockPool.forEach(b => { b.el.style.opacity = '0'; b.life = 0; });
+        blockIntensity = 0;
+        currentCoverage = 0;
+        pitchSwept = false;
+        roarLayers.forEach(l => { if (l.el) { try { l.el.playbackRate = 1; } catch(e){} } });
+      }
+
+      function randomDelay() {
+        return 25000 + Math.random() * 45000;
+      }
+
+      function startVoidSequence() {
+        if (voidRunning) return;
+        ensureCtx();
+        debugBeep();
+
+        voidRunning = true;
+        body.classList.add('void-active');
+        body.classList.remove('void-cut');
+        resetVisuals();
+        startStatic(0.02);
+
+        const delay = randomDelay();
+
+        sequenceTimers.push(setTimeout(() => {
+          const duration = 40000;
+          const start = performance.now();
+          const vw = window.innerWidth, vh = window.innerHeight;
+          const diagonal = Math.sqrt(vw*vw + vh*vh);
+          const finalSize = diagonal * 1.15;
+          lastBlockTime = performance.now();
+
+          const shakeBaseX = 50, shakeBaseY = 50;
+
+          function step(now) {
+            if (!voidRunning) return;
+            const rawT = Math.min(1, (now - start) / duration);
+            const t = 1 - Math.pow(1 - rawT, 3);
+
+            const size = 3 + (finalSize - 3) * t;
+            setCircleSize(size);
+
+            const timeSec = now / 1000;
+            const shakeAmp = t * t * 2.5;
+            const shakeX = shakeBaseX + Math.sin(timeSec * 37.0) * shakeAmp;
+            const shakeY = shakeBaseY + Math.cos(timeSec * 41.7) * shakeAmp;
+            setCirclePos(shakeX, shakeY);
+
+            if (t > 0.45 && !voidCircle.classList.contains('big')) {
+              voidCircle.classList.add('big');
+            }
+
+            const radius = size / 2;
+            const coverage = Math.min(1, (Math.PI * radius * radius) / (vw * vh));
+            currentCoverage = coverage;
+
+            rampStatic(0.02 + coverage * 0.10, 0.2);
+
+            const late = Math.min(1, Math.max(0, (coverage - 0.15) / 0.70));
+
+            redTint.style.opacity = (late * 1.0).toFixed(3);
+            strobeLayer.style.opacity = (late * 0.6).toFixed(3);
+            pixelLayer.style.opacity = (late * 0.75).toFixed(3);
+
+            gBlocks.style.opacity = String(late);
+            gChroma.style.opacity = String(late * 0.95);
+            gTear.style.opacity   = String(late * 0.95);
+            blockIntensity = late;
+            updateBlocks(now);
+
+            roarLayers.forEach(layer => {
+              if (coverage >= layer.startAt) {
+                if (!layer.started) startRoarLayer(layer);
+                updateRoarLayer(layer);
+              }
+            });
+
+            if (coverage >= 0.97 && !pitchSwept) {
+              pitchSwept = true;
+              roarLayers.forEach(layer => {
+                // Layer 4 is one-shot and shouldn't be pitch-bent
+                if (layer.oneShot) return;
+                if (layer.el) {
+                  try {
+                    const from = layer.el.playbackRate || 1;
+                    const to = 0.55;
+                    const sweepStart = performance.now();
+                    const sweepDur = 2500;
+                    function pitchStep() {
+                      if (!voidRunning || !layer.el) return;
+                      const st = Math.min(1, (performance.now() - sweepStart) / sweepDur);
+                      try { layer.el.playbackRate = from + (to - from) * st; } catch(e){}
+                      if (st < 1) requestAnimationFrame(pitchStep);
+                    }
+                    requestAnimationFrame(pitchStep);
+                  } catch(e){}
+                }
+              });
+            }
+
+            if (coverage >= 0.985) { endVoidSequence(); return; }
+            rafId = requestAnimationFrame(step);
+          }
+          rafId = requestAnimationFrame(step);
+        }, delay));
+      }
+
+      function endVoidSequence() {
+        voidRunning = false;
+        clearSequence();
+        stopRoarLayers();
+        stopStatic();
+        // Instant hard cut back to the button — no fade
+        body.classList.add('void-cut');
+        body.classList.remove('void-active');
+        // Restore transitions on the next frame so the next run fades in normally
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            body.classList.remove('void-cut');
+          });
+        });
+        resetVisuals();
+      }
+
+      button.addEventListener('click', startVoidSequence);
+      button.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          if (e.key === ' ') e.preventDefault();
+          startVoidSequence();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
